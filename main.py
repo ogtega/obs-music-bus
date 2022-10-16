@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 import asyncio
 
 from dbus_next.aio.message_bus import MessageBus
