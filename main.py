@@ -7,13 +7,17 @@ from dbus_next.message import Message
 from dbus_next.signature import Variant
 
 bus: MessageBus
+fp = open("out.log", "w")
 
 
 async def out(data: dict[str, Variant]):
     artists: list[str] = data.get("xesam:artist", Variant("as", [])).value
     title: str = data.get("xesam:title", Variant("s", "")).value
+    info = f'{", ".join(artists)} - {title}'
 
-    print(artists, title)
+    fp.seek(0)
+    fp.write(" " * len(info) + info)
+    fp.truncate()
 
 
 async def getProperty(name: str, prop: str):
