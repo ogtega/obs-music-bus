@@ -1,19 +1,69 @@
 #!.venv/bin/python
 import asyncio
+import json
+import re
 
+import aiohttp
 from dbus_next.aio.message_bus import MessageBus
 from dbus_next.constants import MessageType
 from dbus_next.message import Message
 from dbus_next.signature import Variant
 
 bus: MessageBus
+session: aiohttp.ClientSession
 fp = open("out.log", "w")
+image = open("out.jpg", "wb")
+pattern = re.compile(r"https://[a-zA-Z0-9]+.googleusercontent.com/[a-zA-Z0-9-_=]+")
+
+
+async def ytQuery(query: str):
+    async with session.post(
+        "https://music.youtube.com/youtubei/v1/search",
+        json={
+            "context": {
+                "client": {
+                    "clientName": "WEB_REMIX",
+                    "clientVersion": "1.20221010.01.00",
+                }
+            },
+            "user": {},
+            "params": "EgWKAQIIAWoMEA4QChADEAQQCRAF",
+            "query": query,
+        },
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "https://music.youtube.com",
+        },
+    ) as res:
+        data: dict = await res.json()
+
+        return (
+            data.get("contents", {})
+            .get("tabbedSearchResultsRenderer", {})
+            .get("tabs", [{}])[0]
+            .get("tabRenderer", {})
+            .get("content", {})
+        )
 
 
 async def out(data: dict[str, Variant]):
     artists: list[str] = data.get("xesam:artist", Variant("as", [])).value
     title: str = data.get("xesam:title", Variant("s", "")).value
     info = f'{", ".join(artists)} - {title}'
+
+    if not title or not artists:
+        return
+    
+    print(artists, title, "\n")
+
+    thumbs = pattern.findall(json.dumps(await ytQuery(info)))
+
+    if thumbs:
+        async with session.get(thumbs[0]) as res:
+            b = await res.read()
+            image.seek(0)
+            image.write(b)
+            image.truncate()
 
     fp.seek(0)
     fp.write(" " * len(info) + info)
@@ -75,8 +125,11 @@ async def signalCall():
 
 async def main():
     global bus
+    global session
 
     bus = await MessageBus().connect()
+    session = aiohttp.ClientSession()
+
     res = await bus.call(
         Message(
             destination="org.freedesktop.DBus",
@@ -101,6 +154,10 @@ async def main():
     await signalCall()
 
     await asyncio.Future()
+
+    fp.close()
+    image.close()
+    await session.close()
 
 
 asyncio.run(main())
